@@ -1,0 +1,235 @@
+@import "tailwindcss";
+
+:root {
+  --background: #f4f6fa;
+  --surface: #ffffff;
+  --foreground: #18181b;
+  --muted: #71717a;
+  --border: #e4e4e7;
+  --primary: #09090b;
+  --accent-cyan: #85e4ff;
+  --accent-pink: #d6589f;
+  --success: #047857;
+  --danger: #dc2626;
+}
+
+html {
+  background: var(--background);
+  color: var(--foreground);
+}
+
+body {
+  min-height: 100dvh;
+  background: var(--background);
+  color: var(--foreground);
+  font-family:
+    "Helvetica Neue",
+    Helvetica,
+    Arial,
+    "Noto Sans KR",
+    sans-serif;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+.brand-display {
+  font-family:
+    "Helvetica Neue",
+    Helvetica,
+    Arial,
+    sans-serif;
+}
+
+.brand-gradient {
+  background-image: linear-gradient(90deg, var(--accent-cyan), var(--accent-pink));
+}
+
+.grid-field {
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.06) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+
+.grid-field-light {
+  background-image:
+    linear-gradient(rgba(24, 24, 27, 0.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(24, 24, 27, 0.045) 1px, transparent 1px);
+  background-size: 34px 34px;
+}
+
+.card {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  box-shadow: 0 24px 70px rgba(18, 22, 33, 0.08);
+}
+
+.card-dark {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: var(--primary);
+  color: white;
+}
+
+.section-shell {
+  margin-inline: auto;
+  display: flex;
+  min-height: 100dvh;
+  width: 100%;
+  max-width: 1120px;
+  flex-direction: column;
+  padding: 16px 12px 24px;
+}
+
+.kiosk-product-grid,
+.kiosk-buyer-actions,
+.kiosk-center-card {
+  overscroll-behavior: contain;
+}
+
+.kiosk-product-grid {
+  scrollbar-width: thin;
+}
+
+.kiosk-center-card,
+.face-fullscreen-card {
+  max-height: 100%;
+}
+
+.kiosk-center-card {
+  overflow-y: auto;
+}
+
+.face-camera-stage {
+  min-height: 0;
+}
+
+.face-video {
+  background: #09090b;
+}
+
+.tap-highlight {
+  -webkit-tap-highlight-color: transparent;
+}
+
+@media (min-width: 560px) and (max-width: 920px) and (orientation: portrait) {
+  .kiosk-shell {
+    padding: 10px 14px 12px;
+  }
+
+  .kiosk-topbar {
+    height: 56px;
+  }
+
+  .kiosk-topbar img {
+    height: 28px;
+  }
+
+  .kiosk-step-track {
+    max-width: 320px;
+  }
+
+  .kiosk-stage {
+    margin-top: 8px;
+  }
+
+  .kiosk-product-grid {
+    gap: 8px;
+  }
+
+  .kiosk-product-card {
+    min-height: 128px;
+    padding: 8px;
+  }
+
+  .kiosk-product-image {
+    height: 56px;
+    width: 56px;
+  }
+
+  .kiosk-cart-bar {
+    padding: 10px 12px;
+  }
+
+  .kiosk-buyer-grid {
+    grid-template-columns: minmax(0, 1fr) minmax(220px, 250px);
+  }
+
+  .kiosk-buyer-actions {
+    gap: 8px;
+  }
+
+  .kiosk-buyer-actions .card {
+    padding: 12px;
+  }
+
+  .kiosk-center-panel {
+    align-items: center;
+    padding-bottom: 4px;
+  }
+
+  .kiosk-center-card {
+    padding: 18px;
+  }
+
+  .face-fullscreen-card {
+    padding: 12px;
+  }
+
+  .face-camera-stage {
+    max-width: none;
+    min-height: 360px;
+  }
+
+  .face-video {
+    min-height: 360px;
+  }
+
+  .face-frame {
+    height: 72%;
+    max-width: 430px;
+    width: min(64%, 430px);
+  }
+
+  .admin-mobile-shell {
+    max-width: 35rem;
+    padding-inline: 16px;
+  }
+}
+
+@media (max-width: 559px) {
+  .kiosk-screen {
+    height: auto;
+    max-height: none;
+    min-height: 100dvh;
+    overflow-y: auto;
+  }
+
+  .kiosk-stage {
+    overflow: visible;
+  }
+
+  .kiosk-buyer-grid {
+    height: auto;
+  }
+}
+
+@media (min-width: 640px) {
+  .section-shell {
+    padding: 20px 20px 28px;
+  }
+}
+
+@media (min-width: 1024px) {
+  .section-shell {
+    padding: 24px 24px 32px;
+  }
+}
