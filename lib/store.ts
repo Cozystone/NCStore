@@ -1029,21 +1029,41 @@ function parsePurchaseMeta(rows: Array<Record<string, string>>) {
 
 function readInventoryRows(rows: RowWithNumber[], products: Product[]) {
   return rows
-    .filter((row) => row["품목"])
+    .filter((row) => readRowValue(row, ["품목", "품목명"]))
     .map((row) => {
-      const sheetItemName = row["품목"];
+      const sheetItemName = readRowValue(row, ["품목", "품목명"])!;
       const product = findProductBySheetName(products, sheetItemName);
+      const initialStock = parseSheetNumber(readRowValue(row, ["초기재고(개수)", "기초재고"]));
+      const incomingStock = parseSheetNumber(readRowValue(row, ["입고수량(새재고)", "입고수량"]));
+      const soldQuantity = parseSheetNumber(readRowValue(row, ["총 판매수량", "출고수량(판매)", "판매수량"]));
+      const currentStock =
+        readRowValue(row, ["남은재고"]) !== undefined
+          ? parseSheetNumber(readRowValue(row, ["남은재고"]))
+          : Math.max(0, initialStock + incomingStock - soldQuantity);
       return {
         productId: product?.productId,
         name: product?.name ?? sheetItemName,
         sheetItemName,
-        initialStock: parseSheetNumber(row["초기재고(개수)"]),
-        soldQuantity: parseSheetNumber(row["총 판매수량"]),
-        currentStock: parseSheetNumber(row["남은재고"]),
+        initialStock,
+        soldQuantity,
+        currentStock,
         lowStockThreshold: product?.lowStockThreshold ?? 5,
         active: product?.active ?? true,
       };
     });
+}
+
+function readRowValue(row: Record<string, string>, keys: string[]) {
+  for (const key of keys) {
+    const value = row[key];
+    if (value !== undefined && value !== "") return value;
+  }
+  return undefined;
+}
+
+function findHeaderIndex(values: string[][], keys: string[]) {
+  const header = values[0] ?? [];
+  return header.findIndex((cell) => keys.includes(normalizeSummaryKey(cell)));
 }
 
 function resolveLegacyMemberByName(members: Member[], name: string) {
@@ -1340,23 +1360,30 @@ function quantitiesBySheetItem(purchase: Purchase) {
 }
 
 async function updateLegacyInventoryAfterPurchase(client: SheetsClient, purchase: Purchase) {
+  const inventoryValues = await client.getValues(LEGACY_INVENTORY_TAB);
   const inventoryRows = await client.getSheetRowsWithNumbers(LEGACY_INVENTORY_TAB);
+  const soldColumn = findHeaderIndex(inventoryValues, ["총 판매수량", "출고수량(판매)", "판매수량"]);
+  const currentStockColumn = findHeaderIndex(inventoryValues, ["남은재고"]);
   const quantities = quantitiesBySheetItem(purchase);
 
   await Promise.all(
     [...quantities.entries()].map(async ([sheetItemName, quantity]) => {
-      const targetRow = inventoryRows.find((row) => normalizeSummaryKey(row["품목"]) === sheetItemName);
-      if (!targetRow) return;
+      const targetRow = inventoryRows.find(
+        (row) => normalizeSummaryKey(readRowValue(row, ["품목", "품목명"])) === sheetItemName,
+      );
+      if (!targetRow || soldColumn < 0) return;
 
-      const initialStock = parseSheetNumber(targetRow["초기재고(개수)"]);
-      const soldQuantity = parseSheetNumber(targetRow["총 판매수량"]);
+      const initialStock = parseSheetNumber(readRowValue(targetRow, ["초기재고(개수)", "기초재고"]));
+      const incomingStock = parseSheetNumber(readRowValue(targetRow, ["입고수량(새재고)", "입고수량"]));
+      const soldQuantity = parseSheetNumber(readRowValue(targetRow, ["총 판매수량", "출고수량(판매)", "판매수량"]));
       const nextSoldQuantity = soldQuantity + quantity;
-      const nextCurrentStock = Math.max(0, initialStock - nextSoldQuantity);
+      const nextCurrentStock = Math.max(0, initialStock + incomingStock - nextSoldQuantity);
 
-      await Promise.all([
-        client.updateCell(LEGACY_INVENTORY_TAB, targetRow.__rowNumber, 2, String(nextSoldQuantity)),
-        client.updateCell(LEGACY_INVENTORY_TAB, targetRow.__rowNumber, 3, String(nextCurrentStock)),
-      ]);
+      const updates = [client.updateCell(LEGACY_INVENTORY_TAB, targetRow.__rowNumber, soldColumn, String(nextSoldQuantity))];
+      if (currentStockColumn >= 0) {
+        updates.push(client.updateCell(LEGACY_INVENTORY_TAB, targetRow.__rowNumber, currentStockColumn, String(nextCurrentStock)));
+      }
+      await Promise.all(updates);
     }),
   );
 }
@@ -1603,12 +1630,15 @@ function sheetsSource(): Source {
     },
     async adjustInventory(input) {
       const state = await readSheetsState(client, { forceRefresh: true, allowStaleOnError: false });
+      const inventoryValues = await client.getValues(LEGACY_INVENTORY_TAB);
       const inventoryRows = await client.getSheetRowsWithNumbers(LEGACY_INVENTORY_TAB);
-      const targetRow = inventoryRows.find((row) => row["품목"] === input.sheetItemName);
+      const initialStockColumn = findHeaderIndex(inventoryValues, ["초기재고(개수)", "기초재고"]);
+      const targetRow = inventoryRows.find((row) => readRowValue(row, ["품목", "품목명"]) === input.sheetItemName);
       if (!targetRow) throw new Error("재고 품목을 찾지 못했습니다.");
-      const previousInitialStock = parseSheetNumber(targetRow["초기재고(개수)"]);
+      if (initialStockColumn < 0) throw new Error("재고 기준 컬럼을 찾지 못했습니다.");
+      const previousInitialStock = parseSheetNumber(readRowValue(targetRow, ["초기재고(개수)", "기초재고"]));
       const nextInitialStock = Math.max(0, previousInitialStock + input.delta);
-      await client.updateCell(LEGACY_INVENTORY_TAB, targetRow.__rowNumber, 1, String(nextInitialStock));
+      await client.updateCell(LEGACY_INVENTORY_TAB, targetRow.__rowNumber, initialStockColumn, String(nextInitialStock));
       const adjustment: InventoryAdjustment = {
         adjustmentId: `adjustment-${crypto.randomUUID()}`,
         productId: input.productId,
