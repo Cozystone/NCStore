@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AppShell, Card, Header, PrimaryButton, SecondaryButton } from "@/components/ui";
 import { getMemberAdminSubtitle } from "@/lib/member-display";
 import { compareKoreanNames, formatDateTime, paymentStatusLabel, won } from "@/lib/utils";
@@ -56,6 +56,46 @@ export function AdminClient({
       inventory[0]
     );
   }, [inventory, selectedInventoryName]);
+
+  async function lockAdmin(showMessage = true) {
+    await fetch("/api/admin/logout", {
+      method: "POST",
+      keepalive: true,
+    });
+    setAuthed(false);
+    setDashboard(undefined);
+    if (showMessage) setMessage("운영관리 화면이 잠겼습니다. 다시 이용하려면 비밀번호를 입력해 주세요.");
+  }
+
+  useEffect(() => {
+    if (!authed) return;
+
+    function lockSilently() {
+      void fetch("/api/admin/logout", {
+        method: "POST",
+        keepalive: true,
+      });
+      setAuthed(false);
+      setDashboard(undefined);
+    }
+
+    function lockOnLeave() {
+      if (document.visibilityState === "hidden") {
+        lockSilently();
+      }
+    }
+
+    function lockOnPageHide() {
+      lockSilently();
+    }
+
+    document.addEventListener("visibilitychange", lockOnLeave);
+    window.addEventListener("pagehide", lockOnPageHide);
+    return () => {
+      document.removeEventListener("visibilitychange", lockOnLeave);
+      window.removeEventListener("pagehide", lockOnPageHide);
+    };
+  }, [authed]);
 
   async function refreshDashboard(forceRefresh = false) {
     const response = await fetch(`/api/admin/dashboard${forceRefresh ? "?refresh=1" : ""}`, {
@@ -298,7 +338,12 @@ export function AdminClient({
         eyebrow="NCS Operations"
         title="운영관리"
         description="휴대폰에서도 일별 매출, 입금 확인, 재고 조정을 빠르게 처리할 수 있습니다."
-        action={<SecondaryButton onClick={() => void refreshDashboard(true)}>새로고침</SecondaryButton>}
+        action={
+          <div className="grid gap-2">
+            <SecondaryButton onClick={() => void refreshDashboard(true)}>새로고침</SecondaryButton>
+            <SecondaryButton onClick={() => void lockAdmin()}>잠금</SecondaryButton>
+          </div>
+        }
       />
 
       <section className="card-dark mb-4 p-4 text-center">

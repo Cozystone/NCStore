@@ -2,6 +2,8 @@ import { AdminClient } from "@/components/admin-client";
 import { readAdminSession } from "@/lib/auth";
 import { getSource } from "@/lib/store";
 
+export const dynamic = "force-dynamic";
+
 export default async function AdminPage() {
   const source = getSource();
   const session = await readAdminSession();

@@ -37,8 +37,6 @@ import {
 
 const LEGACY_LEDGER_TAB = "거래내역";
 const LEGACY_INVENTORY_TAB = "재고 현황";
-const LEGACY_MEMBER_SUMMARY_TAB = "사람별 합계";
-const LEGACY_DAILY_SALES_TAB = "일별매출";
 const APP_MEMBERS_TAB = "app_members";
 const APP_PRODUCTS_TAB = "app_products";
 const APP_PURCHASE_META_TAB = "app_purchase_meta";
@@ -1037,8 +1035,8 @@ function readInventoryRows(rows: RowWithNumber[], products: Product[]) {
       const incomingStock = parseSheetNumber(readRowValue(row, ["입고수량(새재고)", "입고수량"]));
       const soldQuantity = parseSheetNumber(readRowValue(row, ["총 판매수량", "출고수량(판매)", "판매수량"]));
       const currentStock =
-        readRowValue(row, ["남은재고"]) !== undefined
-          ? parseSheetNumber(readRowValue(row, ["남은재고"]))
+        readRowValue(row, ["남은재고", "현재재고"]) !== undefined
+          ? parseSheetNumber(readRowValue(row, ["남은재고", "현재재고"]))
           : Math.max(0, initialStock + incomingStock - soldQuantity);
       return {
         productId: product?.productId,
@@ -1350,150 +1348,8 @@ async function appendLegacyPurchase(client: SheetsClient, purchase: Purchase) {
   return client.appendValues(LEGACY_LEDGER_TAB, rows);
 }
 
-function quantitiesBySheetItem(purchase: Purchase) {
-  const quantities = new Map<string, number>();
-  for (const item of purchase.items) {
-    const key = normalizeSummaryKey(item.sheetItemNameSnapshot ?? item.nameSnapshot);
-    quantities.set(key, (quantities.get(key) ?? 0) + item.quantity);
-  }
-  return quantities;
-}
-
-async function updateLegacyInventoryAfterPurchase(client: SheetsClient, purchase: Purchase) {
-  const inventoryValues = await client.getValues(LEGACY_INVENTORY_TAB);
-  const inventoryRows = await client.getSheetRowsWithNumbers(LEGACY_INVENTORY_TAB);
-  const soldColumn = findHeaderIndex(inventoryValues, ["총 판매수량", "출고수량(판매)", "판매수량"]);
-  const currentStockColumn = findHeaderIndex(inventoryValues, ["남은재고"]);
-  const quantities = quantitiesBySheetItem(purchase);
-
-  await Promise.all(
-    [...quantities.entries()].map(async ([sheetItemName, quantity]) => {
-      const targetRow = inventoryRows.find(
-        (row) => normalizeSummaryKey(readRowValue(row, ["품목", "품목명"])) === sheetItemName,
-      );
-      if (!targetRow || soldColumn < 0) return;
-
-      const initialStock = parseSheetNumber(readRowValue(targetRow, ["초기재고(개수)", "기초재고"]));
-      const incomingStock = parseSheetNumber(readRowValue(targetRow, ["입고수량(새재고)", "입고수량"]));
-      const soldQuantity = parseSheetNumber(readRowValue(targetRow, ["총 판매수량", "출고수량(판매)", "판매수량"]));
-      const nextSoldQuantity = soldQuantity + quantity;
-      const nextCurrentStock = Math.max(0, initialStock + incomingStock - nextSoldQuantity);
-
-      const updates = [client.updateCell(LEGACY_INVENTORY_TAB, targetRow.__rowNumber, soldColumn, String(nextSoldQuantity))];
-      if (currentStockColumn >= 0) {
-        updates.push(client.updateCell(LEGACY_INVENTORY_TAB, targetRow.__rowNumber, currentStockColumn, String(nextCurrentStock)));
-      }
-      await Promise.all(updates);
-    }),
-  );
-}
-
 function normalizeSummaryKey(value?: string) {
   return (value ?? "").replace(/\s+/g, " ").trim();
-}
-
-function shortSheetDateKey(value: string) {
-  const date = new Date(value);
-  return `${date.getMonth() + 1}.${date.getDate()}`;
-}
-
-function addAmountsBySheetItem(purchase: Purchase) {
-  const amounts = new Map<string, number>();
-  for (const item of purchase.items) {
-    const key = normalizeSummaryKey(item.sheetItemNameSnapshot ?? item.nameSnapshot);
-    amounts.set(key, (amounts.get(key) ?? 0) + item.lineTotal);
-  }
-  return amounts;
-}
-
-async function updateLegacyMemberSummary(client: SheetsClient, purchase: Purchase) {
-  const values = await client.getValues(LEGACY_MEMBER_SUMMARY_TAB);
-  if (!values.length) return;
-
-  const header = values[0].map((cell) => normalizeSummaryKey(cell));
-  const totalColumn = header.findIndex((cell) => cell === "합계");
-  const itemAmounts = addAmountsBySheetItem(purchase);
-  const rowIndex = values.findIndex((row, index) => index > 0 && normalizeSummaryKey(row[0]) === purchase.nameSnapshot);
-  const row =
-    rowIndex >= 0
-      ? [...values[rowIndex]]
-      : Array.from({ length: Math.max(header.length, totalColumn + 1, 1) }, () => "");
-
-  row[0] = purchase.nameSnapshot;
-  for (const [sheetItemName, amount] of itemAmounts) {
-    const column = header.findIndex((cell) => cell === sheetItemName);
-    if (column < 0) continue;
-    row[column] = String(parseSheetNumber(row[column]) + amount);
-  }
-
-  if (totalColumn >= 0) {
-    row[totalColumn] = String(parseSheetNumber(row[totalColumn]) + purchase.totalAmount);
-  }
-
-  if (rowIndex >= 0) {
-    await Promise.all(
-      row.map((value, columnIndex) =>
-        client.updateCell(LEGACY_MEMBER_SUMMARY_TAB, rowIndex + 1, columnIndex, value ?? ""),
-      ),
-    );
-    return;
-  }
-
-  const nextRowNumber = values.length + 1;
-  await Promise.all(
-    row.map((value, columnIndex) =>
-      client.updateCell(LEGACY_MEMBER_SUMMARY_TAB, nextRowNumber, columnIndex, value ?? ""),
-    ),
-  );
-}
-
-async function updateLegacyDailySales(client: SheetsClient, purchase: Purchase) {
-  const values = await client.getValues(LEGACY_DAILY_SALES_TAB);
-  if (!values.length) return;
-
-  const header = values[0].map((cell) => normalizeSummaryKey(cell));
-  const dateColumn = header.findIndex((cell) => cell === shortSheetDateKey(purchase.timestamp));
-  const totalColumn = header.findIndex((cell) => cell === "합계");
-  if (dateColumn < 0) return;
-
-  const itemAmounts = addAmountsBySheetItem(purchase);
-  let nextRowNumber = values.length + 1;
-  for (const [sheetItemName, amount] of itemAmounts) {
-    const rowIndex = values.findIndex((row, index) => index > 0 && normalizeSummaryKey(row[1]) === sheetItemName);
-    const row =
-      rowIndex >= 0
-        ? [...values[rowIndex]]
-        : Array.from({ length: Math.max(header.length, totalColumn + 1, dateColumn + 1, 2) }, () => "");
-
-    row[1] = sheetItemName;
-    row[dateColumn] = formatWonCell(parseSheetNumber(row[dateColumn]) + amount);
-    if (totalColumn >= 0) {
-      row[totalColumn] = formatWonCell(parseSheetNumber(row[totalColumn]) + amount);
-    }
-
-    if (rowIndex >= 0) {
-      await Promise.all(
-        row.map((value, columnIndex) =>
-          client.updateCell(LEGACY_DAILY_SALES_TAB, rowIndex + 1, columnIndex, value ?? ""),
-        ),
-      );
-    } else {
-      const rowNumber = nextRowNumber;
-      nextRowNumber += 1;
-      await Promise.all(
-        row.map((value, columnIndex) =>
-          client.updateCell(LEGACY_DAILY_SALES_TAB, rowNumber, columnIndex, value ?? ""),
-        ),
-      );
-    }
-  }
-}
-
-async function updateLegacyDerivedSheets(client: SheetsClient, purchase: Purchase) {
-  await Promise.all([
-    updateLegacyMemberSummary(client, purchase),
-    updateLegacyDailySales(client, purchase),
-  ]);
 }
 
 async function ensurePurchaseMetaHeader(client: SheetsClient) {
@@ -1597,8 +1453,6 @@ function sheetsSource(): Source {
       const rowNumbers = await appendLegacyPurchase(client, purchase);
       purchase.sheetRowNumbers = rowNumbers;
       await appendPurchaseMeta(client, purchase);
-      await updateLegacyInventoryAfterPurchase(client, purchase);
-      await updateLegacyDerivedSheets(client, purchase);
       invalidateSheetsStateCache();
       return { purchase, syncStatus: "synced" as const };
     },

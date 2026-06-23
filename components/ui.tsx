@@ -50,6 +50,14 @@ export function AppMenu({ className }: { className?: string }) {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
 
+  function lockAdminIfLeaving(href: string) {
+    if (pathname !== "/admin" || href === "/admin") return;
+    void fetch("/api/admin/logout", {
+      method: "POST",
+      keepalive: true,
+    });
+  }
+
   return (
     <div className={className}>
       <button
@@ -104,7 +112,10 @@ export function AppMenu({ className }: { className?: string }) {
                   )}
                   href={item.href}
                   key={item.href}
-                  onClick={() => setOpen(false)}
+                  onClick={() => {
+                    lockAdminIfLeaving(item.href);
+                    setOpen(false);
+                  }}
                 >
                   <div
                     className={cn(
