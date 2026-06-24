@@ -14,3 +14,12 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
   if (!product) return fail("상품을 찾지 못했습니다.", 404);
   return ok(product);
 }
+
+export async function DELETE(_request: Request, context: { params: Promise<{ id: string }> }) {
+  const session = await readAdminSession();
+  if (!session) return fail("관리자 인증이 필요합니다.", 401);
+  const { id } = await context.params;
+  const product = await getSource().deleteProduct(id);
+  if (!product) return fail("상품을 찾지 못했습니다.", 404);
+  return ok({ ok: true, product });
+}

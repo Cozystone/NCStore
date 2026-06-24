@@ -185,6 +185,24 @@ export function AdminClient({
     await refreshDashboard();
   }
 
+  async function deleteProduct(product: Product) {
+    const confirmed = window.confirm(
+      `${product.name} 메뉴를 삭제할까요?\n기존 구매 기록과 실제 장부 기록은 유지되고, 판매 메뉴 목록에서만 제거됩니다.`,
+    );
+    if (!confirmed) return;
+
+    const response = await fetch(`/api/admin/products/${product.productId}`, {
+      method: "DELETE",
+    });
+    const payload = await response.json();
+    if (!response.ok) {
+      setMessage(payload.error ?? "상품 삭제에 실패했습니다.");
+      return;
+    }
+    setMessage(`${product.name} 메뉴를 삭제했습니다.`);
+    await refreshDashboard(true);
+  }
+
   async function createProduct() {
     const name = newProductName.trim();
     const price = Number(newProductPrice);
@@ -579,16 +597,21 @@ export function AdminClient({
           </div>
           <div className="mt-4 space-y-2">
             {products.map((product) => (
-              <div className="flex items-center justify-between gap-3 border border-zinc-200 bg-white p-3 text-left" key={product.productId}>
+              <div className="grid gap-3 border border-zinc-200 bg-white p-3 text-left sm:grid-cols-[minmax(0,1fr)_220px]" key={product.productId}>
                 <div className="min-w-0">
                   <div className="truncate font-black text-zinc-950">{product.name}</div>
                   <div className="text-sm font-bold text-zinc-500">
                     {won(product.price)}원 · 재고 {typeof product.stock === "number" ? `${product.stock}개` : "연동 전"} · 장부명 {product.sheetItemName ?? product.name}
                   </div>
                 </div>
-                <SecondaryButton className="h-10 max-w-28 shrink-0" onClick={() => void toggleProduct(product)}>
-                  {product.active ? "비활성화" : "판매 재개"}
-                </SecondaryButton>
+                <div className="grid grid-cols-2 gap-2">
+                  <SecondaryButton className="h-10" onClick={() => void toggleProduct(product)}>
+                    {product.active ? "비활성화" : "판매 재개"}
+                  </SecondaryButton>
+                  <SecondaryButton className="h-10 border-red-200 text-red-600 hover:border-red-500 hover:bg-red-50" onClick={() => void deleteProduct(product)}>
+                    삭제
+                  </SecondaryButton>
+                </div>
               </div>
             ))}
           </div>

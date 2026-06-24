@@ -121,6 +121,7 @@ type Source = {
   cancelPurchase(purchaseId: string, confirmedBy: string): Promise<Purchase | null>;
   createProduct(input: Pick<Product, "name" | "price" | "active" | "sortOrder" | "sheetItemName" | "aliases" | "lowStockThreshold" | "imageUrl">): Promise<Product>;
   updateProduct(productId: string, input: Partial<Pick<Product, "name" | "price" | "active" | "sortOrder" | "sheetItemName" | "aliases" | "lowStockThreshold" | "imageUrl">>): Promise<Product | null>;
+  deleteProduct(productId: string): Promise<Product | null>;
   createMember(input: Omit<Member, "memberId" | "pinHash" | "pinSalt" | "createdAt" | "updatedAt"> & { pin?: string }): Promise<PublicMember>;
   updateMember(memberId: string, input: Partial<Omit<Member, "memberId" | "pinHash" | "pinSalt" | "createdAt" | "updatedAt">>): Promise<PublicMember | null>;
   resetMemberPin(memberId: string, pin: string): Promise<PublicMember | null>;
@@ -721,6 +722,12 @@ function memorySource(): Source {
       const product = state.products.find((candidate) => candidate.productId === productId);
       if (!product) return null;
       Object.assign(product, input, { updatedAt: new Date().toISOString() });
+      return product;
+    },
+    async deleteProduct(productId) {
+      const index = state.products.findIndex((candidate) => candidate.productId === productId);
+      if (index < 0) return null;
+      const [product] = state.products.splice(index, 1);
       return product;
     },
     async createMember(input) {
@@ -1533,6 +1540,15 @@ function sheetsSource(): Source {
       const product = await memorySourceFromState(state).updateProduct(productId, input);
       await persistAppSheets(client, state);
       invalidateSheetsStateCache();
+      return product;
+    },
+    async deleteProduct(productId) {
+      const state = await readSheetsState(client, { forceRefresh: true, allowStaleOnError: false });
+      const product = await memorySourceFromState(state).deleteProduct(productId);
+      if (product) {
+        await persistAppSheets(client, state);
+        invalidateSheetsStateCache();
+      }
       return product;
     },
     async createMember(input) {
