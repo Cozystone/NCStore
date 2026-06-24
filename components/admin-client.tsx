@@ -18,6 +18,13 @@ type Props = {
   initiallyAuthed: boolean;
 };
 
+function normalizeSignedIntegerInput(value: string) {
+  const trimmed = value.trim();
+  const sign = trimmed.startsWith("-") ? "-" : trimmed.startsWith("+") ? "+" : "";
+  const digits = trimmed.replace(/\D/g, "");
+  return `${sign}${digits}`;
+}
+
 export function AdminClient({
   initialMembers,
   initialProducts,
@@ -217,7 +224,8 @@ export function AdminClient({
 
   async function adjustInventory() {
     const item = selectedInventory;
-    const delta = Number(adjustmentDelta);
+    const normalizedDelta = normalizeSignedIntegerInput(adjustmentDelta);
+    const delta = Number(normalizedDelta);
     if (!item || !Number.isInteger(delta) || delta === 0) {
       setMessage("조정할 품목과 재고 변동 수량을 입력해 주세요.");
       return;
@@ -243,6 +251,12 @@ export function AdminClient({
     setAdjustmentReason("");
     setMessage(`${item.name} 재고를 ${delta > 0 ? "+" : ""}${delta}개 조정했습니다.`);
     await refreshDashboard();
+  }
+
+  function changeAdjustmentDelta(delta: number) {
+    const current = Number(normalizeSignedIntegerInput(adjustmentDelta)) || 0;
+    const next = current + delta;
+    setAdjustmentDelta(next > 0 ? `+${next}` : String(next));
   }
 
   async function resetPin(memberId: string) {
@@ -464,7 +478,7 @@ export function AdminClient({
             실제 `재고 현황` 탭의 초기재고만 조정하고, 조정 로그는 앱 보조 탭에 남깁니다.
           </p>
 
-          <div className="mt-4 grid gap-2 sm:grid-cols-[minmax(0,1fr)_120px_120px]">
+          <div className="mt-4 grid gap-2 sm:grid-cols-[minmax(0,1fr)_160px_120px]">
             <select
               className="h-12 border border-zinc-300 bg-white px-3 text-center text-sm font-black outline-none focus:border-zinc-950"
               onChange={(event) => setSelectedInventoryName(event.target.value)}
@@ -478,14 +492,27 @@ export function AdminClient({
             </select>
             <input
               className="h-12 border border-zinc-300 px-3 text-center text-sm font-black outline-none focus:border-zinc-950"
-              inputMode="numeric"
-              onChange={(event) => setAdjustmentDelta(event.target.value.replace(/[^\d-]/g, ""))}
+              inputMode="text"
+              onChange={(event) => setAdjustmentDelta(normalizeSignedIntegerInput(event.target.value))}
               placeholder="+입고 / -차감"
+              type="text"
               value={adjustmentDelta}
             />
             <PrimaryButton className="h-12" onClick={() => void adjustInventory()}>
               조정
             </PrimaryButton>
+          </div>
+          <div className="mt-2 grid grid-cols-4 gap-2">
+            {[-5, -1, 1, 5].map((delta) => (
+              <SecondaryButton
+                className="h-10 text-xs"
+                key={delta}
+                onClick={() => changeAdjustmentDelta(delta)}
+                type="button"
+              >
+                {delta > 0 ? `+${delta}` : delta}
+              </SecondaryButton>
+            ))}
           </div>
           <input
             className="mt-2 h-12 w-full border border-zinc-300 px-3 text-center text-sm font-bold outline-none focus:border-zinc-950"
